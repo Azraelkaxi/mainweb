@@ -13,17 +13,17 @@ type Node = {
 const COUNT = 78
 const BASE_LINK = 108
 const EXTRA_LINK = 34
-const MOUSE_R = 220
+const MOUSE_R = 240
 const SEPARATE = 32
-const REPEL = 0.018
-const MOUSE_PULL = 0.0055
+const REPEL = 0.014
+const MOUSE_PULL = 0.012
 const DAMPING = 0.992
-const MAX_V = 1.15
+const MAX_V = 1.55
 const CHARGE_UP = 2.4
 const CHARGE_DOWN = 0.85
-const HOME = 0.09
+const HOME = 0.038
 const SCATTER = 150
-const SCATTER_F = 0.01
+const SCATTER_F = 0.004
 
 export function Field() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -91,7 +91,7 @@ export function Field() {
         } else {
           node.charge = Math.max(0, node.charge - CHARGE_DOWN * dt)
         }
-        const settle = mouse.ok ? 0.12 : 1
+        const settle = mouse.ok ? 0.05 : 1
         node.vx += (node.hx - node.x) * HOME * settle * dt
         node.vy += (node.hy - node.y) * HOME * settle * dt
       }
