@@ -8,18 +8,17 @@ type Node = {
   charge: number
 }
 
-const COUNT = 86
-const BASE_LINK = 68
-const EXTRA_LINK = 72
-const MOUSE_R = 200
-const SEPARATE = 36
-const REPEL = 0.022
-const MOUSE_PULL = 0.007
-const DAMPING = 0.994
-const MAX_V = 1.35
-const CHARGE_UP = 0.055
-const CHARGE_DOWN = 0.01
-const CHARGE_HOLD_MS = 900
+const COUNT = 78
+const BASE_LINK = 108
+const EXTRA_LINK = 34
+const MOUSE_R = 220
+const SEPARATE = 32
+const REPEL = 0.018
+const MOUSE_PULL = 0.0055
+const DAMPING = 0.992
+const MAX_V = 1.15
+const CHARGE_UP = 2.4
+const CHARGE_DOWN = 0.85
 
 export function Field() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -31,11 +30,12 @@ export function Field() {
     if (!ctx) return
 
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const mouse = { x: -9999, y: -9999, ok: false, last: 0 }
+    const mouse = { x: -9999, y: -9999, ok: false }
     const nodes: Node[] = []
     let raf = 0
     let w = 0
     let h = 0
+    let last = performance.now()
 
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -53,33 +53,30 @@ export function Field() {
         nodes.push({
           x: Math.random() * w,
           y: Math.random() * h,
-          vx: (Math.random() - 0.5) * 0.28,
-          vy: (Math.random() - 0.5) * 0.28,
+          vx: (Math.random() - 0.5) * 0.22,
+          vy: (Math.random() - 0.5) * 0.22,
           charge: 0,
         })
       }
     }
 
-    const step = () => {
+    const step = (dt: number) => {
       if (reduced) return
-
-      const idle = !mouse.ok && performance.now() - mouse.last > CHARGE_HOLD_MS
 
       for (const node of nodes) {
         const dx = mouse.x - node.x
         const dy = mouse.y - node.y
-        const d2 = dx * dx + dy * dy
-        const near = mouse.ok && d2 < MOUSE_R * MOUSE_R
+        const dist = Math.hypot(dx, dy)
+        const near = mouse.ok && dist < MOUSE_R && dist > 0.001
         if (near) {
-          node.charge = Math.min(1, node.charge + CHARGE_UP)
-          if (d2 > 36) {
-            const d = Math.sqrt(d2)
-            const falloff = 1 - d / MOUSE_R
-            node.vx += (dx / d) * MOUSE_PULL * falloff
-            node.vy += (dy / d) * MOUSE_PULL * falloff
+          const falloff = 1 - dist / MOUSE_R
+          node.charge = Math.min(1, node.charge + CHARGE_UP * falloff * dt)
+          if (dist > 28) {
+            node.vx += (dx / dist) * MOUSE_PULL * falloff
+            node.vy += (dy / dist) * MOUSE_PULL * falloff
           }
-        } else if (idle) {
-          node.charge = Math.max(0, node.charge - CHARGE_DOWN)
+        } else {
+          node.charge = Math.max(0, node.charge - CHARGE_DOWN * dt)
         }
       }
 
@@ -112,21 +109,24 @@ export function Field() {
         node.vy *= DAMPING
         node.x += node.vx
         node.y += node.vy
-        if (node.x < 0 || node.x > w) node.vx *= -0.82
-        if (node.y < 0 || node.y > h) node.vy *= -0.82
+        if (node.x < 0 || node.x > w) node.vx *= -0.86
+        if (node.y < 0 || node.y > h) node.vy *= -0.86
         node.x = Math.min(w, Math.max(0, node.x))
         node.y = Math.min(h, Math.max(0, node.y))
       }
     }
 
-    const draw = () => {
+    const draw = (now: number) => {
+      const dt = Math.min(0.033, (now - last) / 1000)
+      last = now
       ctx.clearRect(0, 0, w, h)
-      step()
+      step(dt)
 
       for (const node of nodes) {
+        const r = 1.05 + node.charge * 0.45
         ctx.beginPath()
-        ctx.fillStyle = 'rgba(212, 160, 86, 0.72)'
-        ctx.arc(node.x, node.y, 1.15, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(212, 160, 86, ${0.55 + node.charge * 0.28})`
+        ctx.arc(node.x, node.y, r, 0, Math.PI * 2)
         ctx.fill()
       }
 
@@ -137,11 +137,14 @@ export function Field() {
           const dx = a.x - b.x
           const dy = a.y - b.y
           const dist = Math.hypot(dx, dy)
-          const reach = BASE_LINK + ((a.charge + b.charge) / 2) * EXTRA_LINK
+          const warmth = (a.charge + b.charge) / 2
+          const reach = BASE_LINK + warmth * EXTRA_LINK
           if (dist > reach) continue
-          const alpha = (1 - dist / reach) * (0.14 + 0.12 * Math.min(a.charge, b.charge))
+          const fade = 1 - dist / reach
+          const alpha = fade * (0.16 + warmth * 0.1)
+          if (alpha < 0.02) continue
           ctx.strokeStyle = `rgba(212, 160, 86, ${alpha})`
-          ctx.lineWidth = 0.7
+          ctx.lineWidth = 0.65
           ctx.beginPath()
           ctx.moveTo(a.x, a.y)
           ctx.lineTo(b.x, b.y)
@@ -150,8 +153,8 @@ export function Field() {
       }
 
       if (mouse.ok) {
-        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 160)
-        glow.addColorStop(0, 'rgba(212, 160, 86, 0.1)')
+        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 140)
+        glow.addColorStop(0, 'rgba(212, 160, 86, 0.07)')
         glow.addColorStop(1, 'rgba(212, 160, 86, 0)')
         ctx.fillStyle = glow
         ctx.fillRect(0, 0, w, h)
@@ -165,17 +168,20 @@ export function Field() {
       mouse.x = event.clientX - rect.left
       mouse.y = event.clientY - rect.top
       mouse.ok = true
-      mouse.last = performance.now()
     }
 
     const onLeave = () => {
       mouse.ok = false
-      mouse.last = performance.now()
     }
 
     resize()
     seed()
-    draw()
+    last = performance.now()
+    if (reduced) {
+      draw(last)
+    } else {
+      raf = requestAnimationFrame(draw)
+    }
     window.addEventListener('resize', resize)
     canvas.addEventListener('pointermove', onMove)
     canvas.addEventListener('pointerleave', onLeave)
