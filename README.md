@@ -6,9 +6,12 @@ Azraelkaxi 的个人主站。前端是 React 个人主页，后端目录预留�
 
 ```
 mainweb/
+  STYLE.md    视觉模板（后续页面沿用）
   frontend/   React + Vite + TypeScript
   backend/    预留
 ```
+
+界面风格见 `STYLE.md`。左侧导航：`/` 理想国，`/about` 站长。新页面用 `frontend/src/components/`，不要另起配色。
 
 本地开发：
 
