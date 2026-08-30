@@ -3,6 +3,8 @@ import { useEffect, useRef } from 'react'
 type Node = {
   x: number
   y: number
+  hx: number
+  hy: number
   vx: number
   vy: number
   charge: number
@@ -19,6 +21,9 @@ const DAMPING = 0.992
 const MAX_V = 1.15
 const CHARGE_UP = 2.4
 const CHARGE_DOWN = 0.85
+const HOME = 0.09
+const SCATTER = 150
+const SCATTER_F = 0.01
 
 export function Field() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -45,14 +50,22 @@ export function Field() {
       canvas.width = Math.floor(w * dpr)
       canvas.height = Math.floor(h * dpr)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      for (const node of nodes) {
+        node.hx = Math.min(w, Math.max(0, node.hx))
+        node.hy = Math.min(h, Math.max(0, node.hy))
+      }
     }
 
     const seed = () => {
       nodes.length = 0
       for (let i = 0; i < COUNT; i += 1) {
+        const x = Math.random() * w
+        const y = Math.random() * h
         nodes.push({
-          x: Math.random() * w,
-          y: Math.random() * h,
+          x,
+          y,
+          hx: x,
+          hy: y,
           vx: (Math.random() - 0.5) * 0.22,
           vy: (Math.random() - 0.5) * 0.22,
           charge: 0,
@@ -78,6 +91,9 @@ export function Field() {
         } else {
           node.charge = Math.max(0, node.charge - CHARGE_DOWN * dt)
         }
+        const settle = mouse.ok ? 0.12 : 1
+        node.vx += (node.hx - node.x) * HOME * settle * dt
+        node.vy += (node.hy - node.y) * HOME * settle * dt
       }
 
       for (let i = 0; i < nodes.length; i += 1) {
@@ -87,15 +103,23 @@ export function Field() {
           const dx = a.x - b.x
           const dy = a.y - b.y
           const dist = Math.hypot(dx, dy)
-          if (dist === 0 || dist >= SEPARATE) continue
-          const overlap = (SEPARATE - dist) / SEPARATE
-          const force = overlap * overlap * REPEL
+          if (dist === 0) continue
           const nx = dx / dist
           const ny = dy / dist
-          a.vx += nx * force
-          a.vy += ny * force
-          b.vx -= nx * force
-          b.vy -= ny * force
+          if (dist < SEPARATE) {
+            const overlap = (SEPARATE - dist) / SEPARATE
+            const force = overlap * overlap * REPEL
+            a.vx += nx * force
+            a.vy += ny * force
+            b.vx -= nx * force
+            b.vy -= ny * force
+          } else if (dist < SCATTER) {
+            const force = (1 - dist / SCATTER) * SCATTER_F * dt
+            a.vx += nx * force
+            a.vy += ny * force
+            b.vx -= nx * force
+            b.vy -= ny * force
+          }
         }
       }
 
