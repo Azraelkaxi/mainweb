@@ -9,7 +9,12 @@ type Node = {
 
 const COUNT = 86
 const LINK = 128
-const MOUSE_R = 180
+const MOUSE_R = 200
+const SEPARATE = 36
+const REPEL = 0.022
+const MOUSE_PULL = 0.007
+const DAMPING = 0.994
+const MAX_V = 1.35
 
 export function Field() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -49,31 +54,64 @@ export function Field() {
       }
     }
 
-    const draw = () => {
-      ctx.clearRect(0, 0, w, h)
+    const step = () => {
+      if (reduced) return
 
       for (const node of nodes) {
-        if (!reduced) {
-          if (mouse.ok) {
-            const dx = mouse.x - node.x
-            const dy = mouse.y - node.y
-            const d2 = dx * dx + dy * dy
-            if (d2 < MOUSE_R * MOUSE_R && d2 > 16) {
-              const d = Math.sqrt(d2)
-              node.vx += (dx / d) * 0.018
-              node.vy += (dy / d) * 0.018
-            }
+        if (mouse.ok) {
+          const dx = mouse.x - node.x
+          const dy = mouse.y - node.y
+          const d2 = dx * dx + dy * dy
+          if (d2 < MOUSE_R * MOUSE_R && d2 > 36) {
+            const d = Math.sqrt(d2)
+            const falloff = 1 - d / MOUSE_R
+            node.vx += (dx / d) * MOUSE_PULL * falloff
+            node.vy += (dy / d) * MOUSE_PULL * falloff
           }
-          node.vx *= 0.99
-          node.vy *= 0.99
-          node.x += node.vx
-          node.y += node.vy
-          if (node.x < 0 || node.x > w) node.vx *= -1
-          if (node.y < 0 || node.y > h) node.vy *= -1
-          node.x = Math.min(w, Math.max(0, node.x))
-          node.y = Math.min(h, Math.max(0, node.y))
         }
+      }
 
+      for (let i = 0; i < nodes.length; i += 1) {
+        for (let j = i + 1; j < nodes.length; j += 1) {
+          const a = nodes[i]
+          const b = nodes[j]
+          const dx = a.x - b.x
+          const dy = a.y - b.y
+          const dist = Math.hypot(dx, dy)
+          if (dist === 0 || dist >= SEPARATE) continue
+          const overlap = (SEPARATE - dist) / SEPARATE
+          const force = overlap * overlap * REPEL
+          const nx = dx / dist
+          const ny = dy / dist
+          a.vx += nx * force
+          a.vy += ny * force
+          b.vx -= nx * force
+          b.vy -= ny * force
+        }
+      }
+
+      for (const node of nodes) {
+        const speed = Math.hypot(node.vx, node.vy)
+        if (speed > MAX_V) {
+          node.vx = (node.vx / speed) * MAX_V
+          node.vy = (node.vy / speed) * MAX_V
+        }
+        node.vx *= DAMPING
+        node.vy *= DAMPING
+        node.x += node.vx
+        node.y += node.vy
+        if (node.x < 0 || node.x > w) node.vx *= -0.82
+        if (node.y < 0 || node.y > h) node.vy *= -0.82
+        node.x = Math.min(w, Math.max(0, node.x))
+        node.y = Math.min(h, Math.max(0, node.y))
+      }
+    }
+
+    const draw = () => {
+      ctx.clearRect(0, 0, w, h)
+      step()
+
+      for (const node of nodes) {
         ctx.beginPath()
         ctx.fillStyle = 'rgba(212, 160, 86, 0.72)'
         ctx.arc(node.x, node.y, 1.15, 0, Math.PI * 2)
