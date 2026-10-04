@@ -11,7 +11,7 @@ mainweb/
   backend/    预留
 ```
 
-界面风格见 `STYLE.md`。左侧导航：`/` 理想国，`/about` 站长。新页面用 `frontend/src/components/`，不要另起配色。
+界面风格见 `STYLE.md`。左侧导航：`/` 理想国，`/workshop` 工坊，`/archive` 档案，`/night` 夜航，`/about` 站长。帖子放在 `frontend/src/posts/*.md`。新页面用 `frontend/src/components/`，不要另起配色。
 
 本地开发：
 

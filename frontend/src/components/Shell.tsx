@@ -5,6 +5,9 @@ import { republic } from '../data/republic'
 
 const links = [
   { to: '/', label: '理想国', end: true },
+  { to: '/workshop', label: '工坊', end: false },
+  { to: '/archive', label: '档案', end: false },
+  { to: '/night', label: '夜航', end: false },
   { to: '/about', label: '站长', end: false },
 ] as const
 
@@ -30,14 +33,6 @@ export function Shell({ children }: { children: ReactNode }) {
               {link.label}
             </NavLink>
           ))}
-          <a
-            className="rail-link"
-            href={profile.github}
-            target="_blank"
-            rel="noreferrer"
-          >
-            仓库
-          </a>
         </nav>
 
         <p className="rail-status">创作进行中</p>
