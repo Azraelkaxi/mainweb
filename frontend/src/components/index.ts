@@ -1,5 +1,4 @@
 export { Page } from './Page'
-export { Nav, NavLink } from './Nav'
 export { Hero } from './Hero'
 export { Section } from './Section'
 export { RowList } from './RowList'
