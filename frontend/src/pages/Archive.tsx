@@ -2,9 +2,13 @@ import { Hero, Page, RowList, Section } from '../components'
 import { posts } from '../data/posts'
 import { republic } from '../data/republic'
 
-const archive = republic.districts[1]
+const archive = republic.districts.find((district) => district.path === '/archive')
 
 export function Archive() {
+  if (!archive) {
+    throw new Error('Missing district for /archive')
+  }
+
   return (
     <Page>
       <Hero eyebrow={archive.eyebrow} title={archive.name} tagline={archive.tagline}>
