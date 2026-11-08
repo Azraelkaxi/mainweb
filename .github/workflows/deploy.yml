@@ -11,24 +11,52 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  actions: read
   contents: read
 
 jobs:
   deploy:
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    env:
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
 
     steps:
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          name: dist
-          run-id: ${{ github.event.workflow_run.id }}
-          path: dist
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      # main 又往前走时，说明更新的 CI 已经触发了一次 Deploy，这次直接让位
+      - name: Check still latest
+        id: latest
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin main
+          if [ "$(git rev-parse origin/main)" = "$HEAD_SHA" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "main 已前进到 $(git rev-parse --short origin/main)，跳过这次部署"
+          fi
 
       - name: Setup SSH
+        if: steps.latest.outputs.ok == 'true'
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           HOST: ${{ vars.DEPLOY_HOST || '43.133.230.43' }}
@@ -41,6 +69,7 @@ jobs:
           ssh-keyscan -H "$HOST" >> "$HOME/.ssh/known_hosts"
 
       - name: Sync to server
+        if: steps.latest.outputs.ok == 'true'
         env:
           HOST: ${{ vars.DEPLOY_HOST || '43.133.230.43' }}
           USER: ${{ vars.DEPLOY_USER || 'root' }}
@@ -49,11 +78,13 @@ jobs:
           set -euo pipefail
           rsync -az --delete \
             -e "ssh -i $HOME/.ssh/mainweb_deploy -o IdentitiesOnly=yes" \
-            dist/ "$USER@$HOST:$REMOTE/"
+            frontend/dist/ "$USER@$HOST:$REMOTE/"
           ssh -i "$HOME/.ssh/mainweb_deploy" -o IdentitiesOnly=yes "$USER@$HOST" \
             "chown -R www:www '$REMOTE' && chmod 755 '$REMOTE'"
 
       - name: Smoke test
+        if: steps.latest.outputs.ok == 'true'
         run: |
           set -euo pipefail
           curl -fsS --max-time 15 https://www.azraelkaxi.top | grep -q '<div id="root">'
+          echo "部署完成：$HEAD_SHA"

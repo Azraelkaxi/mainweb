@@ -17,7 +17,7 @@ issue（你开）
 - `.github/workflows/ai-spec.yml`：issue 打开后，AI 只读分析并回复需求理解。
 - `.github/workflows/ai-build.yml`：`/approve` 后，AI 在 `ai/issue-<n>` 分支改代码并开 PR。
 - `.github/workflows/ai-reject.yml`：`/reject` 关闭 issue。
-- `.github/workflows/deploy.yml`：main 的 CI 成功后，用 `rsync` 同步 `dist` 到服务器，并做一次 HTTPS 冒烟测试。
+- `.github/workflows/deploy.yml`：main 的 CI 成功后，按同一个 commit 重新构建，用 `rsync` 同步 `dist` 到服务器，并做一次 HTTPS 冒烟测试。构建放在 Deploy 里而不是复用 CI 产物，是因为跨 run 下载 artifact 会偶发 `Artifact not found`，重跑也一样；重新构建只多花几十秒，但结果确定。
 - `.github/ai/opencode.json`：CI 专用的模型、agent 和权限。只复制到 runner 的 `~/.config/opencode/`，不影响本地。
 - `AGENTS.md`：AI 和人类共用的仓库约定。
 - 本机生成了部署密钥 `mainweb/.deploy/mainweb_deploy`（已被 `.gitignore` 排除），对应公钥备注 `github-actions-mainweb`。
