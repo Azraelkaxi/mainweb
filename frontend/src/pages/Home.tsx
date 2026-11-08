@@ -1,14 +1,18 @@
+import { useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { Field } from '../components/Field'
-import { useCityClock, useStageCoord } from '../cityTime'
+import { HomeReadout, type HomeReadoutHandle } from '../components/HomeReadout'
 import { republic } from '../data/republic'
 
 export function Home() {
-  const clock = useCityClock()
-  const { coord, onPointerMove, onPointerLeave } = useStageCoord()
+  const readoutRef = useRef<HomeReadoutHandle>(null)
 
   return (
-    <section className="home" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
+    <section
+      className="home"
+      onPointerMove={(event) => readoutRef.current?.onPointerMove(event)}
+      onPointerLeave={() => readoutRef.current?.onPointerLeave()}
+    >
       <Field />
       <div className="home-copy">
         <p className="eyebrow">{republic.eyebrow}</p>
@@ -32,10 +36,7 @@ export function Home() {
             </li>
           ))}
         </ul>
-        <p className="home-readout">
-          <span>{clock} · 理想国时间</span>
-          <span>坐标 {coord}</span>
-        </p>
+        <HomeReadout ref={readoutRef} />
       </div>
     </section>
   )
