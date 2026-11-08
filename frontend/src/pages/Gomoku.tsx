@@ -18,6 +18,7 @@ export function Gomoku() {
   const [thinking, setThinking] = useState(false)
   const [last, setLast] = useState<[number, number] | null>(null)
   const [hover, setHover] = useState<[number, number] | null>(null)
+  const [focusedCell, setFocusedCell] = useState<[number, number]>([0, 0])
 
   useEffect(() => {
     if (!thinking) return
@@ -73,32 +74,59 @@ export function Gomoku() {
           {statusText(result, thinking)}
         </p>
         <div className="goboard" role="grid" aria-label="五子棋棋盘">
-          {board.map((row, y) =>
-            row.map((cell, x) => {
-              const key = `${x}-${y}`
-              const ghost = hover?.[0] === x && hover?.[1] === y && !cell && result === 'play' && !thinking
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  className="gocell"
-                  role="gridcell"
-                  aria-label={labelFor(cell, x, y)}
-                  disabled={result !== 'play' || thinking || cell !== 0}
-                  onClick={() => play(x, y)}
-                  onPointerEnter={() => setHover([x, y])}
-                  onPointerLeave={() => setHover(null)}
-                >
-                  {cell || ghost ? (
-                    <span
-                      className={stoneClass(cell, ghost, last, x, y)}
-                      aria-hidden="true"
-                    />
-                  ) : null}
-                </button>
-              )
-            }),
-          )}
+          {board.map((row, y) => (
+            <div className="gorow" role="row" key={y}>
+              {row.map((cell, x) => {
+                const key = `${x}-${y}`
+                const ghost = hover?.[0] === x && hover?.[1] === y && !cell && result === 'play' && !thinking
+                return (
+                  <div
+                    key={key}
+                    className="gocell"
+                    data-cell={key}
+                    role="gridcell"
+                    aria-label={labelFor(cell, x, y)}
+                    aria-disabled={result !== 'play' || thinking || cell !== 0}
+                    tabIndex={focusedCell[0] === x && focusedCell[1] === y ? 0 : -1}
+                    onClick={(event) => {
+                      setFocusedCell([x, y])
+                      event.currentTarget.focus()
+                      play(x, y)
+                    }}
+                    onKeyDown={(event) => {
+                      let nextX = x
+                      let nextY = y
+                      if (event.key === 'ArrowLeft') nextX = Math.max(0, x - 1)
+                      else if (event.key === 'ArrowRight') nextX = Math.min(14, x + 1)
+                      else if (event.key === 'ArrowUp') nextY = Math.max(0, y - 1)
+                      else if (event.key === 'ArrowDown') nextY = Math.min(14, y + 1)
+                      else if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        play(x, y)
+                        return
+                      } else return
+
+                      event.preventDefault()
+                      setFocusedCell([nextX, nextY])
+                      event.currentTarget
+                        .closest('[role="grid"]')
+                        ?.querySelector<HTMLElement>(`[data-cell="${nextX}-${nextY}"]`)
+                        ?.focus()
+                    }}
+                    onPointerEnter={() => setHover([x, y])}
+                    onPointerLeave={() => setHover(null)}
+                  >
+                    {cell || ghost ? (
+                      <span
+                        className={stoneClass(cell, ghost, last, x, y)}
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+          ))}
         </div>
         <button className="quiet" type="button" onClick={reset}>
           重来

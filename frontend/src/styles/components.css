@@ -351,13 +351,19 @@
 
 .goboard {
   display: grid;
-  grid-template-columns: repeat(15, minmax(0, 1fr));
+  grid-template-rows: repeat(15, minmax(0, 1fr));
   width: min(480px, 100%);
   aspect-ratio: 1;
   border-top: 1px solid var(--line);
   border-left: 1px solid var(--line);
   background: var(--bg-raise);
   touch-action: manipulation;
+}
+
+.gorow {
+  display: grid;
+  grid-template-columns: repeat(15, minmax(0, 1fr));
+  min-height: 0;
 }
 
 .gocell {
@@ -370,7 +376,7 @@
   cursor: pointer;
 }
 
-.gocell:disabled {
+.gocell[aria-disabled='true'] {
   cursor: default;
 }
 
