@@ -1,0 +1,127 @@
+name: AI Spec
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ai-spec-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  spec:
+    if: >-
+      github.event.issue.state == 'open' && (
+        (github.event.action == 'opened' && github.event.issue.author_association == 'OWNER') ||
+        (github.event.action == 'labeled' && github.event.label.name == 'ai:spec' && github.event.sender.login == github.repository_owner)
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
+      - name: Install OpenCode
+        run: npm install --global @opencode/cli
+
+      - name: Prepare OpenCode config
+        run: |
+          mkdir -p "$HOME/.config/opencode"
+          cp .github/ai/opencode.json "$HOME/.config/opencode/opencode.json"
+
+      - name: Create labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create "ai:spec" --color "1d76db" --description "等待 AI 分析" --force
+          gh label create "ai:awaiting-approval" --color "fbca04" --description "等待人类批准需求理解" --force
+
+      - name: Read issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          jq -r '.issue.title' "$GITHUB_EVENT_PATH" > /tmp/issue-title.txt
+          jq -r '.issue.body // ""' "$GITHUB_EVENT_PATH" > /tmp/issue-body.txt
+          gh api "repos/$REPO/issues/$NUMBER/comments?per_page=100" \
+            --jq '[.[] | select((.body | contains("<!-- ai-spec -->")) | not) | select((.body | contains("<!-- ai-build-failed -->")) | not)] | .[-10:] | .[] | "### @" + .user.login + "\n" + .body' \
+            > /tmp/comments.md || true
+          {
+            cat .github/ai/spec-prompt.md
+            echo
+            echo "## Issue #$NUMBER"
+            echo
+            echo "### 标题"
+            cat /tmp/issue-title.txt
+            echo
+            echo "### 正文"
+            cat /tmp/issue-body.txt
+            if [ -s /tmp/comments.md ]; then
+              echo
+              echo "## 已有讨论"
+              cat /tmp/comments.md
+            fi
+          } > /tmp/prompt.md
+
+      - name: Ask AI
+        env:
+          HAORAN_API_KEY: ${{ secrets.HAORAN_API_KEY }}
+        run: |
+          opencode run --standalone --auto --agent ci-spec --archived --format json \
+            --model haoran/gpt-6-luna \
+            "$(cat /tmp/prompt.md)" > /tmp/spec.jsonl 2> /tmp/spec.err
+
+      - name: Post understanding
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          jq -rs '[.[] | select(.type == "text")] | last | .part.text // empty' /tmp/spec.jsonl > /tmp/spec.md
+          if [ ! -s /tmp/spec.md ]; then
+            echo "AI 没有返回需求理解"
+            tail -40 /tmp/spec.err || true
+            exit 1
+          fi
+          {
+            echo "<!-- ai-spec -->"
+            echo "## 需求理解（AI）"
+            echo
+            cat /tmp/spec.md
+            echo
+            echo "---"
+            echo "回复 \`/approve\` 开始实现；回复 \`/reject\` 取消；给 issue 重新加上 \`ai:spec\` 标签可重新分析。"
+          } > /tmp/comment.md
+          gh issue comment "$NUMBER" --body-file /tmp/comment.md
+
+      - name: Update labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          gh issue edit "$NUMBER" --add-label "ai:awaiting-approval" || true
+          gh issue edit "$NUMBER" --remove-label "ai:spec" || true
+
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment "$NUMBER" --body "AI 分析失败，请查看 [Actions](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})。"

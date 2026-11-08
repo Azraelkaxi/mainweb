@@ -1,0 +1,54 @@
+name: 功能 / 改动
+description: 给 AI 机器人一个可执行的需求
+title: "[需求] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交后机器人会自动分析，并在 issue 里回复一份「需求理解」。
+        确认无误后回复 `/approve` 开始写代码；回复 `/reject` 取消。
+        给 issue 重新加上 `ai:spec` 标签可以重新分析。
+
+  - type: textarea
+    id: background
+    attributes:
+      label: 背景
+      description: 为什么做这个？现在哪里不舒服？
+      placeholder: 例如：档案页还没有帖子，想先支持 Markdown 入卷。
+    validations:
+      required: true
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标
+      description: 做完之后，用户能看到或做到什么？
+      placeholder: 例如：/archive 能按日期列出 posts/ 下的 Markdown，点进去能读全文。
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 写可验证的条目，包括页面路径、交互和构建命令。
+      value: |
+        - [ ] `cd frontend && npm run lint` 通过
+        - [ ] `cd frontend && npm run build` 通过
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: 不做什么
+      description: 明确排除，防止 AI 过度实现。
+      placeholder: 例如：不改后台、不加新依赖、不动现有配色和字体。
+
+  - type: textarea
+    id: references
+    attributes:
+      label: 参考
+      description: 截图、链接、相关文件或页面。
+      placeholder: 例如：参考 STYLE.md 的列表样式。

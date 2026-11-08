@@ -13,6 +13,10 @@ mainweb/
 
 界面风格见 `STYLE.md`。左侧导航：`/` 理想国，`/workshop` 工坊，`/archive` 档案，`/night` 夜航，`/about` 站长。帖子放在 `frontend/src/posts/*.md`。新页面用 `frontend/src/components/`，不要另起配色。
 
+## 自动化
+
+开 issue 后 AI 会先回复「需求理解」；回复 `/approve` 让它写代码、开 PR，CI 通过后自动合并并部署。配置和手动步骤见 `.github/AI_SETUP.md`，代码约定见 `AGENTS.md`。
+
 本地开发：
 
 ```bash

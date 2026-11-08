@@ -1,0 +1,59 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          run-id: ${{ github.event.workflow_run.id }}
+          path: dist
+
+      - name: Setup SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ vars.DEPLOY_HOST || '43.133.230.43' }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > "$HOME/.ssh/mainweb_deploy"
+          chmod 600 "$HOME/.ssh/mainweb_deploy"
+          ssh-keyscan -H "$HOST" >> "$HOME/.ssh/known_hosts"
+
+      - name: Sync to server
+        env:
+          HOST: ${{ vars.DEPLOY_HOST || '43.133.230.43' }}
+          USER: ${{ vars.DEPLOY_USER || 'root' }}
+          REMOTE: ${{ vars.DEPLOY_PATH || '/www/apps/mainweb/app' }}
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            -e "ssh -i $HOME/.ssh/mainweb_deploy -o IdentitiesOnly=yes" \
+            dist/ "$USER@$HOST:$REMOTE/"
+          ssh -i "$HOME/.ssh/mainweb_deploy" -o IdentitiesOnly=yes "$USER@$HOST" \
+            "chown -R www:www '$REMOTE' && chmod 755 '$REMOTE'"
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 15 https://www.azraelkaxi.top | grep -q '<div id="root">'

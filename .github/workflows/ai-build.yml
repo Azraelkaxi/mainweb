@@ -1,0 +1,273 @@
+name: AI Build
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: ai-build-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: >-
+      github.event.issue.pull_request == null &&
+      github.event.issue.state == 'open' &&
+      github.event.comment.user.login == github.repository_owner &&
+      contains(github.event.comment.body, '/approve') &&
+      (
+        contains(github.event.issue.labels.*.name, 'ai:awaiting-approval') ||
+        contains(github.event.issue.labels.*.name, 'ai:failed')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.BOT_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
+      - name: Install OpenCode
+        run: npm install --global @opencode/cli
+
+      - name: Prepare OpenCode config
+        run: |
+          mkdir -p "$HOME/.config/opencode"
+          cp .github/ai/opencode.json "$HOME/.config/opencode/opencode.json"
+
+      - name: Mark as building
+        env:
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh label create "ai:building" --color "d4a056" --description "AI 正在实现" --force
+          gh label create "ai:pr" --color "0e8a16" --description "AI 已开 PR" --force
+          gh label create "ai:failed" --color "b60205" --description "AI 实现失败" --force
+          gh issue edit "$NUMBER" --add-label "ai:building" || true
+          gh issue edit "$NUMBER" --remove-label "ai:awaiting-approval" || true
+          gh issue edit "$NUMBER" --remove-label "ai:failed" || true
+
+      - name: Read issue and approved spec
+        env:
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+          NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          jq -r '.issue.title' "$GITHUB_EVENT_PATH" > /tmp/issue-title.txt
+          jq -r '.issue.body // ""' "$GITHUB_EVENT_PATH" > /tmp/issue-body.txt
+
+          SPEC=$(gh api "repos/$REPO/issues/$NUMBER/comments" --paginate \
+            --jq '[.[] | select(.body | contains("<!-- ai-spec -->"))] | last | .body // empty')
+          if [ -z "$SPEC" ]; then
+            echo "找不到已批准的需求理解，先让 AI 分析。"
+            exit 1
+          fi
+          printf '%s\n' "$SPEC" > /tmp/spec.md
+
+          gh api "repos/$REPO/issues/$NUMBER/comments?per_page=100" \
+            --jq '[.[] | select((.body | contains("<!-- ai-spec -->")) | not) | select((.body | contains("<!-- ai-build-failed -->")) | not)] | .[-10:] | .[] | "### @" + .user.login + "\n" + .body' \
+            > /tmp/comments.md || true
+
+          {
+            cat .github/ai/build-prompt.md
+            echo
+            echo "## Issue #$NUMBER"
+            echo
+            echo "### 标题"
+            cat /tmp/issue-title.txt
+            echo
+            echo "### 正文"
+            cat /tmp/issue-body.txt
+            echo
+            echo "## 已批准的需求理解"
+            echo
+            cat /tmp/spec.md
+            if [ -s /tmp/comments.md ]; then
+              echo
+              echo "## Issue 讨论"
+              cat /tmp/comments.md
+            fi
+          } > /tmp/prompt.md
+
+      - name: Create branch
+        run: |
+          set -euo pipefail
+          BRANCH="ai/issue-${{ github.event.issue.number }}"
+          git config user.name "azrael-ai"
+          git config user.email "azrael-ai@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
+
+      - name: Ask AI
+        id: agent
+        continue-on-error: true
+        env:
+          HAORAN_API_KEY: ${{ secrets.HAORAN_API_KEY }}
+        run: |
+          opencode run --standalone --auto --agent ci-build --archived --format json \
+            --model haoran/gpt-6-luna \
+            "$(cat /tmp/prompt.md)" > /tmp/agent.jsonl 2> /tmp/agent.err
+
+      - name: Extract agent summary
+        if: always()
+        run: |
+          jq -rs '[.[] | select(.type == "text")] | last | .part.text // empty' \
+            /tmp/agent.jsonl > /tmp/agent.md 2>/dev/null || true
+          if [ -s /tmp/agent.md ]; then
+            cat /tmp/agent.md
+          fi
+
+      - name: Verify
+        id: verify
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          echo "--- 改动 ---"
+          git status --porcelain
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "AI 没有改动任何文件" | tee /tmp/verify.log
+            exit 1
+          fi
+          CHANGED=$(git status --porcelain | sed 's/^...//')
+          if echo "$CHANGED" | grep -Eq '^(\.github/|deploy/|backend/|AGENTS\.md|STYLE\.md|README\.md|\.gitignore|frontend/package(-lock)?\.json|frontend/vite\.config\.ts|frontend/tsconfig.*\.json|frontend/\.gitignore|frontend/\.oxlintrc\.json)'; then
+            echo "AI 修改了受保护文件，拒绝创建 PR：" | tee /tmp/verify.log
+            echo "$CHANGED" | tee -a /tmp/verify.log
+            exit 1
+          fi
+          {
+            cd frontend
+            npm run lint
+            npm run build
+          } 2>&1 | tee /tmp/verify.log
+
+      - name: Commit and push
+        id: publish
+        if: always()
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "HAS_CHANGES=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          git add -A
+          git commit -m "feat: 实现 #${{ github.event.issue.number }}（AI）"
+          git push --force origin "$BRANCH"
+          echo "HAS_CHANGES=true" >> "$GITHUB_ENV"
+
+      - name: Open PR and enable auto-merge
+        if: steps.agent.outcome == 'success' && steps.verify.outcome == 'success' && env.HAS_CHANGES == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+          NUMBER: ${{ github.event.issue.number }}
+          BRANCH: ${{ env.BRANCH }}
+        run: |
+          set -euo pipefail
+          {
+            echo "Closes #$NUMBER"
+            echo
+            echo "## 改动文件"
+            echo
+            echo '```'
+            git show --stat --oneline HEAD
+            echo '```'
+            echo
+            echo "## AI 实现说明"
+            echo
+            cat /tmp/agent.md 2>/dev/null || echo "（AI 没有输出说明，改动见 Files changed）"
+            echo
+            echo "## 已批准的需求理解"
+            echo
+            cat /tmp/spec.md
+            echo
+            echo "---"
+            echo "由 AI 自动生成；CI 通过后自动 squash merge。"
+          } > /tmp/pr.md
+
+          PR_URL=$(gh pr list --head "$BRANCH" --state open --json url --jq '.[0].url // empty')
+          if [ -z "$PR_URL" ]; then
+            PR_URL=$(gh pr create --base main --head "$BRANCH" \
+              --title "${{ github.event.issue.title }} (#$NUMBER)" \
+              --body-file /tmp/pr.md)
+          fi
+          echo "PR：$PR_URL"
+          gh issue edit "$NUMBER" --add-label "ai:pr" || true
+          gh issue edit "$NUMBER" --remove-label "ai:building" || true
+
+          if ! gh pr merge "$PR_URL" --auto --squash --delete-branch; then
+            gh issue comment "$NUMBER" --body "PR 已创建，但无法开启自动合并。请确认仓库已开启 **Allow auto-merge**，并给 main 配置必须通过的 **build** 检查。"
+          fi
+
+      - name: Report failure
+        if: >-
+          steps.agent.outcome == 'failure' ||
+          steps.verify.outcome == 'failure' ||
+          steps.publish.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+          NUMBER: ${{ github.event.issue.number }}
+          BRANCH: ${{ env.BRANCH }}
+        run: |
+          set -euo pipefail
+          {
+            echo "<!-- ai-build-failed -->"
+            echo "## AI 实现失败"
+            echo
+            echo "分支：\`$BRANCH\`（有改动时会保留）"
+            echo
+            echo "### 验证日志"
+            echo '```'
+            tail -80 /tmp/verify.log 2>/dev/null || echo "无"
+            echo '```'
+            echo
+            echo "### Agent 输出"
+            echo
+            cat /tmp/agent.md 2>/dev/null || echo "无"
+            echo
+            echo "### Agent 错误日志"
+            echo '```'
+            tail -80 /tmp/agent.err 2>/dev/null || echo "无"
+            echo '```'
+            echo
+            echo "修复问题或调整需求后，回复 \`/approve\` 重试。"
+          } > /tmp/fail.md
+          gh issue comment "$NUMBER" --body-file /tmp/fail.md
+          gh issue edit "$NUMBER" --add-label "ai:failed" || true
+          gh issue edit "$NUMBER" --remove-label "ai:building" || true
+
+      - name: Report early failure
+        if: >-
+          failure() &&
+          steps.agent.outcome != 'failure' &&
+          steps.verify.outcome != 'failure' &&
+          steps.publish.outcome != 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment "$NUMBER" --body "AI 实现流程在准备阶段失败，请查看 [Actions](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})。"
+          gh issue edit "$NUMBER" --add-label "ai:failed" || true
+          gh issue edit "$NUMBER" --remove-label "ai:building" || true

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "haoran/gpt-6-luna",
+  "providers": {
+    "haoran": {
+      "name": "Haoran",
+      "env": ["HAORAN_API_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.haoran.cc/v1",
+        "headerTimeout": 600000,
+        "chunkTimeout": 600000
+      },
+      "models": {
+        "gpt-6-luna": {
+          "name": "GPT-6 Luna",
+          "capabilities": { "tools": true }
+        },
+        "deepseek-v4.1-flash": {
+          "name": "DeepSeek V4.1 Flash",
+          "capabilities": { "tools": true }
+        },
+        "glm-5.3-flash": {
+          "name": "GLM-5.3 Flash",
+          "capabilities": { "tools": true }
+        }
+      }
+    }
+  },
+  "permissions": [
+    { "action": "read", "resource": "*.env", "effect": "deny" },
+    { "action": "read", "resource": "*.env.*", "effect": "deny" },
+    { "action": "read", "resource": "*.key", "effect": "deny" },
+    { "action": "external_directory", "resource": "*", "effect": "deny" }
+  ],
+  "agents": {
+    "ci-spec": {
+      "description": "只读分析 issue，输出需求理解",
+      "mode": "primary",
+      "steps": 20,
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+        { "action": "shell", "resource": "*", "effect": "deny" },
+        { "action": "webfetch", "resource": "*", "effect": "deny" },
+        { "action": "websearch", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "question", "resource": "*", "effect": "deny" }
+      ]
+    },
+    "ci-build": {
+      "description": "按已批准的需求修改前端代码",
+      "mode": "primary",
+      "steps": 45,
+      "permissions": [
+        { "action": "edit", "resource": ".github/*", "effect": "deny" },
+        { "action": "edit", "resource": "AGENTS.md", "effect": "deny" },
+        { "action": "edit", "resource": "STYLE.md", "effect": "deny" },
+        { "action": "edit", "resource": "README.md", "effect": "deny" },
+        { "action": "edit", "resource": ".gitignore", "effect": "deny" },
+        { "action": "edit", "resource": "frontend/.gitignore", "effect": "deny" },
+        { "action": "edit", "resource": "frontend/.oxlintrc.json", "effect": "deny" },
+        { "action": "edit", "resource": "deploy/*", "effect": "deny" },
+        { "action": "edit", "resource": "backend/*", "effect": "deny" },
+        { "action": "edit", "resource": "frontend/package.json", "effect": "deny" },
+        { "action": "edit", "resource": "frontend/package-lock.json", "effect": "deny" },
+        { "action": "edit", "resource": "frontend/vite.config.ts", "effect": "deny" },
+        { "action": "edit", "resource": "frontend/tsconfig*.json", "effect": "deny" },
+        { "action": "edit", "resource": "*.env*", "effect": "deny" },
+        { "action": "webfetch", "resource": "*", "effect": "deny" },
+        { "action": "websearch", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "question", "resource": "*", "effect": "deny" },
+        { "action": "shell", "resource": "*", "effect": "deny" },
+        { "action": "shell", "resource": "cd *", "effect": "allow" },
+        { "action": "shell", "resource": "npm ci", "effect": "allow" },
+        { "action": "shell", "resource": "npm ci *", "effect": "allow" },
+        { "action": "shell", "resource": "npm run *", "effect": "allow" },
+        { "action": "shell", "resource": "npm ls *", "effect": "allow" },
+        { "action": "shell", "resource": "git status *", "effect": "allow" },
+        { "action": "shell", "resource": "git diff *", "effect": "allow" },
+        { "action": "shell", "resource": "git log *", "effect": "allow" },
+        { "action": "shell", "resource": "git show *", "effect": "allow" },
+        { "action": "shell", "resource": "git push *", "effect": "deny" },
+        { "action": "shell", "resource": "git commit *", "effect": "deny" },
+        { "action": "shell", "resource": "git checkout *", "effect": "deny" },
+        { "action": "shell", "resource": "npm publish *", "effect": "deny" },
+        { "action": "shell", "resource": "curl *", "effect": "deny" },
+        { "action": "shell", "resource": "wget *", "effect": "deny" },
+        { "action": "shell", "resource": "ssh *", "effect": "deny" },
+        { "action": "shell", "resource": "scp *", "effect": "deny" },
+        { "action": "shell", "resource": "rm *", "effect": "deny" },
+        { "action": "shell", "resource": "sudo *", "effect": "deny" }
+      ]
+    }
+  }
+}
