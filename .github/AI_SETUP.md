@@ -129,6 +129,7 @@ gh api -X PATCH repos/Azraelkaxi/mainweb -F allow_auto_merge=true
 5. AI 会开 PR。CI 绿后自动合并，Deploy 自动同步到服务器。
 6. 失败时 issue 里会有日志和 `ai:failed` 标签。改需求或修问题后回 `/approve` 重试。
 7. 想重新分析：给 issue 加上 `ai:spec` 标签。
+8. 同时有多个 PR 时，`Update PR Branches` 会在 main 每次前进后把落后的 AI 分支同步到最新，再交给 auto-merge。
 
 ## 边界
 
@@ -142,6 +143,6 @@ gh api -X PATCH repos/Azraelkaxi/mainweb -F allow_auto_merge=true
 
 - **AI 没有回复**：看 Actions 里 `AI Spec` 的运行日志；确认 `HAORAN_API_KEY` 已设置。
 - **`/approve` 没反应**：确认 issue 上有 `ai:awaiting-approval` 或 `ai:failed` 标签，评论人是仓库所有者。
-- **PR 没自动合并**：确认 Allow auto-merge 已开，main 保护规则里有 `build` 检查；`ai-build` 的日志里会写原因。
+- **PR 没自动合并**：确认 Allow auto-merge 已开，main 保护规则里有 `build` 检查。若 PR 显示 `BEHIND`，说明分支落后 main，等 `Update PR Branches` 跑完或手动 `gh pr update-branch <number>`；该 workflow 只处理 `ai/issue-*` 分支。
 - **部署失败**：看 `Deploy` 日志；确认 `DEPLOY_SSH_KEY` 是 `.deploy/mainweb_deploy` 的内容，服务器 22 端口可达。
 - **想换模型**：改 `.github/ai/opencode.json` 里的 `model`，以及两个 workflow 里的 `--model`。
