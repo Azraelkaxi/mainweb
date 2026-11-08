@@ -105,6 +105,7 @@
   font-weight: 400;
   line-height: 0.86;
   letter-spacing: -0.04em;
+  white-space: nowrap;
 }
 
 .home-meta {
