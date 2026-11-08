@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Route, Routes, useLocation } from 'react-router-dom'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { Shell } from './components/Shell'
 import { posts } from './data/posts'
 import { About } from './pages/About'
@@ -38,17 +39,19 @@ function App() {
 
   return (
     <Shell>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/workshop/gomoku" element={<Gomoku />} />
-        <Route path="/workshop/lamps" element={<Lamps />} />
-        <Route path="/workshop" element={<Workshop />} />
-        <Route path="/archive/:slug" element={<PostPage />} />
-        <Route path="/archive" element={<Archive />} />
-        <Route path="/night" element={<Night />} />
-        <Route path="/about" element={<About />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <ErrorBoundary key={pathname}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/workshop/gomoku" element={<Gomoku />} />
+          <Route path="/workshop/lamps" element={<Lamps />} />
+          <Route path="/workshop" element={<Workshop />} />
+          <Route path="/archive/:slug" element={<PostPage />} />
+          <Route path="/archive" element={<Archive />} />
+          <Route path="/night" element={<Night />} />
+          <Route path="/about" element={<About />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </ErrorBoundary>
     </Shell>
   )
 }
