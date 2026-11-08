@@ -20,7 +20,7 @@ export function RowList({ items }: { items: RowItem[] }) {
             </span>
           </>
         )
-        const outbound = item.external !== false
+        const outbound = item.external === true
 
         return (
           <li key={item.name}>
