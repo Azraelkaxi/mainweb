@@ -1,0 +1,35 @@
+name: Update PR Branches
+
+# main 前进后，把还开着的 AI PR 分支同步到最新 main。
+# 分支保护要求「必须最新」时，auto-merge 不会自己更新分支，只能由这里推一把。
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: update-pr-branches
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Update AI PR branches that are behind main
+        env:
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh pr list --repo "$REPO" --state open --limit 50 \
+            --json number,headRefName \
+            --jq '.[] | select(.headRefName | startswith("ai/issue-")) | .number' |
+          while read -r number; do
+            echo "updating #$number"
+            gh pr update-branch "$number" --repo "$REPO" || echo "skip #$number"
+          done
